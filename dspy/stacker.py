@@ -5,6 +5,7 @@ from astropy.io import fits
 from matplotlib import pylab as plt
 from scipy import signal
 plt.ion()
+from tqdm import tqdm
 
 
 class StackerError( Exception ):
@@ -46,7 +47,7 @@ class Stacker( object ):
                         dtype = raw0.raw_image.dtype )
 
         # read each frame and put it into the stack
-        for i,b in enumerate( frm_list ):
+        for i,b in enumerate( tqdm(frm_list) ):
             raw = rawpy.imread( b )
             stk[:,:,i] = raw.raw_image
 
@@ -72,7 +73,7 @@ class Stacker( object ):
         """
         write the stack to a fits file 
         """
-        hdu = fits.PrimaryHDU( self.stack )
+        hdu = fits.PrimaryHDU( self.get_stack() )
         hdul = fits.HDUList( [hdu] )
         hdul.writeto( filename )
 
@@ -120,6 +121,8 @@ class BiasStacker( Stacker ):
         """ 
         stk_frms is a list of frame files to stack or an np.ndarray
                  object that is N x M x nframes
+
+        the np.median method creates float64 as output type
         """
         super().__init__( bias_frms, method = method )
         
@@ -266,16 +269,19 @@ class LightStacker( Stacker ):
         return dpf
         
             
-if __name__=='__main__':
+if __name__=='__main__' and False:
     
-    bias_list = glob.glob( '/home/apn/data/stars/biases-2019-06-02/iso800/Bias*.dng' )
-    dark_list = glob.glob( '/home/apn/data/stars/darks-2019-05-29/iso800/Darks*.dng' )
-    flat_list = glob.glob( '/home/apn/data/stars/flats-2019-06-01/iso800/Flats*.dng' )
-    light_list = glob.glob( '/home/apn/data/stars/lights-2019-06-02/ursa_major/Lights*.dng' )
+    bias_list = glob.glob( '/data/stars/biases-2019-06-02/iso800/Bias*.dng' )
+    dark_list = glob.glob( '/data/stars/darks-2019-05-29/iso800/Darks*.dng' )
+    flat_list = glob.glob( '/data/stars/2019-08-29/f1/Lights*.dng' )
+    light_list = glob.glob( '/data/stars/2019-08-29/s1/Lights*.dng' )
 
-    bias_stacker = BiasStacker( bias_list[0:10] )
-    dark_stacker = DarkStacker( dark_list[0:10] ,
+    bias_stacker = BiasStacker( bias_list )
+    
+    
+    dark_stacker = DarkStacker( dark_list,
                                 bias_stack = bias_stacker )
+    
     flat_stacker = FlatStacker( flat_list[0:10] ,
                                 bias_stack = bias_stacker,
                                 dark_stack = dark_stacker )
