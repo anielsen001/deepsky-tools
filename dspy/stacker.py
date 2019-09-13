@@ -7,6 +7,11 @@ from scipy import signal
 plt.ion()
 from tqdm import tqdm
 
+import logging
+logger = logging.getLogger( 'stacker' )
+logger.setLevel( logging.DEBUG )
+ch = logging.StreamHandler()
+logger.addHandler( ch )
 
 class StackerError( Exception ):
     pass
@@ -39,6 +44,7 @@ class Stacker( object ):
         read a list of files specifying frames into 
         memory
         """
+        logger.debug('Stacker:read_list')
         
         raw0 = rawpy.imread( frm_list[0] )
         sz = raw0.raw_image.shape
@@ -54,6 +60,9 @@ class Stacker( object ):
         return stk
 
     def stack( self, method = None ):
+
+        logger.debug('Stacker:stack')
+        
         if method is None:
             method = self.method
 
@@ -64,6 +73,9 @@ class Stacker( object ):
         self._stack = stk
 
     def get_stack( self ):
+        
+        logger.debug('Stacker:get_stack')
+        
         if self._stack is None:
             self.stack()
 
@@ -73,6 +85,8 @@ class Stacker( object ):
         """
         write the stack to a fits file 
         """
+        logger.debug('Stacker:write')
+        
         hdu = fits.PrimaryHDU( self.get_stack() )
         hdul = fits.HDUList( [hdu] )
         hdul.writeto( filename )
@@ -85,6 +99,9 @@ class Stacker( object ):
         This generic method just returns the original raw frames. 
         Override it if you need to do something else.
         """
+        
+        logger.debug('Stacker:preprocess')
+        
         return self._raw_frames
 
     def postprocess( self ):
@@ -92,6 +109,8 @@ class Stacker( object ):
         define a post-process method to apply after stacking to the 
         stacked frame, this default just returns the stack.
         """
+        logger.debug('Stacker:postprocess')
+        
         return self._stack
         
     def debayer( self, bayer_frame ):
@@ -99,6 +118,8 @@ class Stacker( object ):
         remove the bayer mosaic from the raw FPA data. This method sums
         the 2x2 area to a single pixel value. 
         """
+        logger.debug('Stacker:debayer')
+        
         # convolve and downsample to sum into 2x2 blocks
         kernel = np.ones([2,2])
         fscds = signal.convolve2d( bayer_frame, kernel, 'same' )[::2, ::2]
@@ -107,8 +128,6 @@ class Stacker( object ):
         # an alternative for multiple frames to debayer is like
         # frmc = signal.convolve( frm, kernel[:,:,np.newaxis])[::2, ::2, : ]
         return fscds
-    
-
     
 class BiasStacker( Stacker ):
     """
@@ -137,6 +156,7 @@ class DarkStacker( Stacker ):
                   dark_frames,
                   bias_stack = None,
                   method = np.median ):
+        
         self._bias_stack = bias_stack
         super().__init__( dark_frames, method = method )
         
@@ -145,7 +165,8 @@ class DarkStacker( Stacker ):
         remove the bias frame from each dark frame if the bias
         frame is configured
         """
-
+        logger.debug('DarkStacker:preprocess')
+        
         if self._bias_stack is not None:
             bstk_frm = self._bias_stack.get_stack()
             pp_frames = self._raw_frames - bstk_frm[:,:,np.newaxis]
@@ -182,23 +203,28 @@ class FlatStacker( Stacker ):
         remove the bias and dark frame stack from each frame
         """
 
+        logger.debug('FlatStacker:preprocess')
+
+        pp_frames = self._raw_frames
+        
         # remove bias if input as option
         if self._bias_stack is not None:
-            pp_frames = self._raw_frames - self._bias_stack.get_stack()[:,:,np.newaxis]
-        else:
-            pp_frames = self._raw_frames
-
+            pp_frames = pp_frames - self._bias_stack.get_stack()[:,:,np.newaxis]
+        
         # remove dark if input as option
         if self._dark_stack is not None:
-            pp_frames = self._raw_frames - self._dark_stack.get_stack()[:,:,np.newaxis]
-
+            pp_frames = pp_frames - self._dark_stack.get_stack()[:,:,np.newaxis]
+           
         # return - this still has the bayer mosaic
         return pp_frames
 
     def make_flat_frame( self ):
         """
-        generate the flat frame to use. 
+        generate the flat frame to use. Does not return the flat frame.
         """
+        
+        logger.debug('FlatStacker:make_flat_frame')
+        
         # debayer the image - now it's downsample 2x2 in each direction
         dimg = self.debayer( self.get_stack() )
 
@@ -208,6 +234,12 @@ class FlatStacker( Stacker ):
         self._flat = dimg
 
     def get_flat( self ):
+        """
+        return the flat frame as a numpy array
+        """
+
+        logger.debug('FlatStacker:get_flat')
+        
         if self._flat is None:
             self.make_flat_frame()
 
@@ -244,19 +276,18 @@ class LightStacker( Stacker ):
         """
         remove dark frame stack from each frame
         """
+        logger.debug('LightStacker:preprocess')
 
-        # bias and dark frame removal are done on the Mosaiced frame
-
+        pp_frames = self._raw_frames
+        
         # remove bias if input as option
         if self._bias_stack is not None:
-            pp_frames = self._raw_frames - self._bias_stack.get_stack()[:,:,np.newaxis]
-        else:
-            pp_frames = self._raw_frames
-
+            pp_frames = pp_frames - self._bias_stack.get_stack()[:,:,np.newaxis]
+        
         # remove dark if input as option
         if self._dark_stack is not None:
-            pp_frames = self._raw_frames - self._dark_stack.get_stack()[:,:,np.newaxis]
-
+            pp_frames = pp_frames - self._dark_stack.get_stack()[:,:,np.newaxis]
+           
         if self._flat_stack is not None:
             # in order to flatten the frames, we must debayer them
             kernel = np.ones( [2,2] )
