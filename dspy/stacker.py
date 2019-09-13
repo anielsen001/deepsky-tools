@@ -122,11 +122,19 @@ class Stacker( object ):
         
         # convolve and downsample to sum into 2x2 blocks
         kernel = np.ones([2,2])
-        fscds = signal.convolve2d( bayer_frame, kernel, 'same' )[::2, ::2]
-        # fscds is the debayed frame
 
-        # an alternative for multiple frames to debayer is like
-        # frmc = signal.convolve( frm, kernel[:,:,np.newaxis])[::2, ::2, : ]
+        # how many dimensions does the bayer_frame have?
+        ndims = len( bayer_frame.shape )
+
+        if ndims == 2:
+            fscds = signal.convolve2d( bayer_frame, kernel, 'valid' )[::2, ::2]
+            # fscds is the debayed frame
+        elif ndims == 3:
+            # an alternative for multiple frames to debayer is like
+            fscds = signal.convolve( bayer_frame,
+                                     kernel[:,:,np.newaxis],
+                                     mode = 'valid' )[::2, ::2, : ]
+            
         return fscds
     
 class BiasStacker( Stacker ):
@@ -274,7 +282,9 @@ class LightStacker( Stacker ):
 
     def preprocess( self ):
         """
+        remove bias frame stack from each frame
         remove dark frame stack from each frame
+        debayer each frame
         """
         logger.debug('LightStacker:preprocess')
 
@@ -290,34 +300,42 @@ class LightStacker( Stacker ):
            
         if self._flat_stack is not None:
             # in order to flatten the frames, we must debayer them
-            kernel = np.ones( [2,2] )
-            db_pp = signal.convolve( pp_frames, kernel[:,:,np.newaxis] ,'same')[::2,::2,:]
-
+            # kernel = np.ones( [2,2] )
+            # db_pp = signal.convolve( pp_frames, kernel[:,:,np.newaxis] ,'same')[::2,::2,:]
+            db_pp = self.debayer( pp_frames )
+            
             # flatten each
             flt = self._flat_stack.get_flat()
-            dpf = db_pp / flt[:,:,np.newaxis]
+            pp_frames = db_pp / flt[:,:,np.newaxis]
             
-        return dpf
+        return pp_frames
         
             
 if __name__=='__main__' and False:
-    
-    bias_list = glob.glob( '/data/stars/biases-2019-06-02/iso800/Bias*.dng' )
-    dark_list = glob.glob( '/data/stars/darks-2019-05-29/iso800/Darks*.dng' )
-    flat_list = glob.glob( '/data/stars/2019-08-29/f1/Lights*.dng' )
-    light_list = glob.glob( '/data/stars/2019-08-29/s1/Lights*.dng' )
 
-    bias_stacker = BiasStacker( bias_list )
+    if False: 
+        bias_list = glob.glob( '/data/stars/biases-2019-06-02/iso800/Bias*.dng' )
+        dark_list = glob.glob( '/data/stars/darks-2019-05-29/iso800/Darks*.dng' )
+        flat_list = glob.glob( '/data/stars/2019-08-29/f1/Lights*.dng' )
+        light_list = glob.glob( '/data/stars/2019-08-29/s1/Lights*.dng' )
+
+    if True:
+        bias_list = glob.glob( '/home/apn/data/stars/biases-2019-06-02/iso800/Bias*.dng' )
+        dark_list = glob.glob( '/home/apn/data/stars/darks-2019-05-29/iso800/Darks*.dng' )
+        flat_list = glob.glob( '/home/apn/data/stars/flats-2019-06-01/iso800/Flats*.dng' )
+        light_list = glob.glob( '/home/apn/data/stars/lights-2019-06-02/ursa_major/Lights*.dng' )
+
+    bias_stacker = BiasStacker( bias_list[0:10] )
     
     
-    dark_stacker = DarkStacker( dark_list,
+    dark_stacker = DarkStacker( dark_list[0:10],
                                 bias_stack = bias_stacker )
     
     flat_stacker = FlatStacker( flat_list[0:10] ,
                                 bias_stack = bias_stacker,
                                 dark_stack = dark_stacker )
 
-    light_stacker = LightStacker( [ light_list[0] ],
+    light_stacker = LightStacker( light_list[0:10] ,
                                   bias_stack = bias_stacker,
                                   dark_stack = dark_stacker,
                                   flat_stack = flat_stacker,
