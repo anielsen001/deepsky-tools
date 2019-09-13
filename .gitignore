@@ -1,0 +1,8 @@
+# emacs files
+*~
+\#*\#
+
+# python files
+*.pyc
+*.pyo
+
