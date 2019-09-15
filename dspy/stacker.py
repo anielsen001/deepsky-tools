@@ -194,6 +194,7 @@ class FlatStacker( Stacker ):
     _bias_stack = None
     _dark_stack = None
     _flat = None
+    _flat_mean = None
 
     def __init__( self,
                   flat_frames,
@@ -237,9 +238,14 @@ class FlatStacker( Stacker ):
         dimg = self.debayer( self.get_stack() )
 
         # normalize the dmin to unity gain
-        dimg /= np.sum( dimg.flatten() )
+        ### this step scales all the flat values to very small numbers
+        #dimg /= np.sum( dimg.flatten() )
 
-        self._flat = dimg
+        # the resulting flat image should be an image that can be divided
+        # into raw frames
+        self._flat_mean = np.mean( dimg[:] )
+        
+        self._flat = dimg / self._flat_mean
 
     def get_flat( self ):
         """
@@ -326,7 +332,6 @@ if __name__=='__main__' and False:
         light_list = glob.glob( '/home/apn/data/stars/lights-2019-06-02/ursa_major/Lights*.dng' )
 
     bias_stacker = BiasStacker( bias_list[0:10] )
-    
     
     dark_stacker = DarkStacker( dark_list[0:10],
                                 bias_stack = bias_stacker )
