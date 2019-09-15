@@ -32,7 +32,7 @@ light_stacker = LightStacker( light_list[0:10] ,
                               bias_stack = bias_stacker,
                               dark_stack = dark_stacker,
                               flat_stack = flat_stacker,
-                              method = np.sum,
+                              method = np.mean,
                               reg_method = None )
 
 frm = light_stacker.preprocess() 
