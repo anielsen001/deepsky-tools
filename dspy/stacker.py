@@ -61,11 +61,11 @@ class Stacker( object ):
 
     def stack( self, method = None ):
 
-        logger.debug('Stacker:stack')
-        
         if method is None:
             method = self.method
 
+        logger.debug('Stacker:stack with: ' + self.method.__name__ )
+            
         # preprocess the frames for stacking
         pp_stk = self.preprocess()
             
