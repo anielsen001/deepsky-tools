@@ -20,16 +20,23 @@ class Stacker( object ):
     """
     a generic stacker object
     """
+    # method used to stack frames default is np.median
     _method = None
+
+    # list of raw files containing each frame to put into the stack
     _frame_list = None
+
+    # 3-D array of each input frame to the stack
     _raw_frames = None
-    _stack = None
+
+    # 2-D array of output from stacking process
+    _stack = None     
     
     def __init__( self,
                   frms,
                   method = np.median ):
         
-        self.method = method
+        self._method = method
 
         if type( frms ) is np.ndarray:
             self._raw_frames = frms
@@ -62,9 +69,9 @@ class Stacker( object ):
     def stack( self, method = None ):
 
         if method is None:
-            method = self.method
+            method = self._method
 
-        logger.debug('Stacker:stack with: ' + self.method.__name__ )
+        logger.debug('Stacker:stack with: ' + self._method.__name__ )
             
         # preprocess the frames for stacking
         pp_stk = self.preprocess()
@@ -92,11 +99,30 @@ class Stacker( object ):
         # add some informaton to the header
         hdr = hdu.header
         # name of stacking method
-        hdr['method'] = self.method.__name__ 
+        hdr['method'] = self._method.__name__ 
         # 
         
         hdul = fits.HDUList( [hdu] )
         hdul.writeto( filename )
+
+    def write_preprocess( self, filepattern = 'pp_' ):
+        """
+        write out each frame after applying the preprocessing corrections
+        file pattern is a pattern to use when writing the frames 
+        
+        The default filepattern pp_ follows the siril convention
+        """
+        logger.debug('Stacker:write_preprocess')
+
+        pp_frms = self.preprocess()
+
+        nframes = self._raw_frames.shape[2]
+
+        for iframe in tqdm( range( nframes ) ):
+            fname = filepattern + str(iframe).rjust(5,'0') + '.fits'
+            hdu = fits.PrimaryHDU( np.squeeze( pp_frms[:,:,iframe] ) )
+            hdul = fits.HDUList( [ hdu ] )
+            hdul.writeto( fname )
 
     def preprocess( self ):
         """
