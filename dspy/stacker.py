@@ -54,8 +54,8 @@ class Stacker( object ):
 
         # read each frame and put it into the stack
         for i,b in enumerate( tqdm(frm_list) ):
-            raw = rawpy.imread( b )
-            stk[:,:,i] = raw.raw_image
+            with rawpy.imread( b ) as raw:
+                stk[:,:,i] = raw.raw_image.copy()
 
         return stk
 
@@ -88,6 +88,13 @@ class Stacker( object ):
         logger.debug('Stacker:write')
         
         hdu = fits.PrimaryHDU( self.get_stack() )
+
+        # add some informaton to the header
+        hdr = hdu.header
+        # name of stacking method
+        hdr['method'] = self.method.__name__ 
+        # 
+        
         hdul = fits.HDUList( [hdu] )
         hdul.writeto( filename )
 
