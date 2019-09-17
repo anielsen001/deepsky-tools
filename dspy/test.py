@@ -19,7 +19,7 @@ if True:
     flat_list = glob.glob( '/home/apn/data/stars/flats-2019-06-01/iso800/Flats*.dng' )
     light_list = glob.glob( '/home/apn/data/stars/lights-2019-06-02/ursa_major/Lights*.dng' )
 
-bias_stacker = BiasStacker( bias_list )
+bias_stacker = BiasStacker( bias_list[1:10] )
 bias_stacker.write('test/bias_test.fits')
 
 dark_stacker = DarkStacker( dark_list,
@@ -38,4 +38,4 @@ light_stacker = LightStacker( light_list[0:10] ,
                               method = np.mean,
                               reg_method = None )
 
-frm = light_stacker.write_preprocess('test/pp_test_') 
+frm = light_stacker.write_preprocess('test/pp_test_',dtype='int16',overwrite=True) 
