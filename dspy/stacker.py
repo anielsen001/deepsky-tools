@@ -93,6 +93,31 @@ class Stacker( object ):
         write the stack to a fits file 
         """
         logger.debug('Stacker:write')
+
+        # siril appears to have some restrictions on the data types
+        # you can write out and use for partial reading in the registration
+        # algorithms.
+        #
+        # see src/core/siril.h for the type defintions:
+        #  /* bitpix can take the following values:
+        # * BYTE_IMG     (8-bit byte pixels, 0 - 255)
+        # * SHORT_IMG    (16 bit signed integer pixels)  
+        # * USHORT_IMG   (16 bit unsigned integer pixels)        (used by Siril, quite off-standard)
+        # * LONG_IMG     (32-bit integer pixels)
+        # * FLOAT_IMG    (32-bit floating point pixels)
+        # * DOUBLE_IMG   (64-bit floating point pixels)
+        # * http://heasarc.nasa.gov/docs/software/fitsio/quick/node9.html
+        # */
+        #
+        # and src/io/image_format_fits.c for registration error message:
+        # if (fit->bitpix != SHORT_IMG && fit->bitpix != USHORT_IMG
+	# && fit->bitpix != BYTE_IMG) {
+	# siril_log_message(
+	# _("Only Siril FITS images can be used with partial image reading.\n"));
+	# return -1;
+	# }
+
+
         
         hdu = fits.PrimaryHDU( self.get_stack() )
 
