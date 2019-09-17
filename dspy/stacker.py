@@ -88,12 +88,50 @@ class Stacker( object ):
 
         return self._stack
         
-    def write( self, filename ):
+    def write( self, filename, dtype = None, overwrite = False ):
         """
         write the stack to a fits file 
+        
+        dtype specifies the data type to write out. It should be one of numpy's
+        acceptable types. The default is None which will use the type of the 
+        array returned from self.get_stack()
+
         """
         logger.debug('Stacker:write')
 
+        stk = self.get_stack()
+
+        self.write_frame_to_fits( filename, stk, dtype = dtype, overwrite = overwrite )
+        
+
+    def write_preprocess( self, filepattern = 'pp_', dtype = None, overwrite = False ):
+        """
+        write out each frame after applying the preprocessing corrections
+        file pattern is a pattern to use when writing the frames 
+        
+        The default filepattern pp_ follows the siril convention
+        """
+        logger.debug('Stacker:write_preprocess')
+
+        pp_frms = self.preprocess()
+
+        nframes = self._raw_frames.shape[2]
+
+        for iframe in tqdm( range( nframes ) ):
+            fname = filepattern + str(iframe).rjust(5,'0') + '.fits'
+            
+            hdu = fits.PrimaryHDU( np.squeeze( pp_frms[:,:,iframe] ) )
+
+            self.write_frame_to_fits( fname,
+                                      np.squeeze( pp_frms[:,:,iframe]),
+                                      dtype = dtype,
+                                      overwrite = overwrite )
+
+    def write_frame_to_fits( self, filename, frame, dtype = None, overwrite = False ):
+        """
+        write out a 2D frame of data to a fits file, casting to a particular
+        numpy dtype beforehand if necessary
+        """
         # siril appears to have some restrictions on the data types
         # you can write out and use for partial reading in the registration
         # algorithms.
@@ -116,11 +154,35 @@ class Stacker( object ):
 	# _("Only Siril FITS images can be used with partial image reading.\n"));
 	# return -1;
 	# }
-
-
+        #
+        # options to handle this with astropy are hdu.scale or
+        # cast using numpy's astype before writing
+        #
+        # the acceptable siril types are all integers so some rounding
+        # will occur when going from float64. we'll do some checking on the
+        # dynamic range of the data to see how it will fit.
         
-        hdu = fits.PrimaryHDU( self.get_stack() )
+        if dtype is None:
+            # if not specified, use the type of the frame
+            dtype = frame.dtype
 
+        elif dtype != frame.dtype:
+            # check if the specified type matches the stack
+            # requested to cast the data, so determine if the data
+            # will fit in the requested type
+            if ( frame.max() >= np.iinfo( dtype ).max or\
+                 frame.min() <= np.iinfo( dtype ).min ):
+                # data is outside range supported by datatype
+                raise StackError('Cannot cast to requested type, data ouside range')
+            
+        # else: the are the same type, so we don't have to do anything
+
+        # this cast will potentially round floating point numbers to integers
+        if not np.can_cast( frame, dtype, casting = 'safe' ):
+            logger.warning('Casting from %s to %s will reduce precision'%(str(frame.dtype), str(dtype)))
+
+        hdu = fits.PrimaryHDU( frame.astype( dtype ) )
+            
         # add some informaton to the header
         hdr = hdu.header
         # name of stacking method
@@ -128,27 +190,9 @@ class Stacker( object ):
         # 
         
         hdul = fits.HDUList( [hdu] )
-        hdul.writeto( filename )
-
-    def write_preprocess( self, filepattern = 'pp_' ):
-        """
-        write out each frame after applying the preprocessing corrections
-        file pattern is a pattern to use when writing the frames 
+        hdul.writeto( filename, overwrite = True )
         
-        The default filepattern pp_ follows the siril convention
-        """
-        logger.debug('Stacker:write_preprocess')
-
-        pp_frms = self.preprocess()
-
-        nframes = self._raw_frames.shape[2]
-
-        for iframe in tqdm( range( nframes ) ):
-            fname = filepattern + str(iframe).rjust(5,'0') + '.fits'
-            hdu = fits.PrimaryHDU( np.squeeze( pp_frms[:,:,iframe] ) )
-            hdul = fits.HDUList( [ hdu ] )
-            hdul.writeto( fname )
-
+        
     def preprocess( self ):
         """
         Define this preprocess method to apply to the raw
