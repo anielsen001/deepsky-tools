@@ -1,10 +1,11 @@
+import glob # not needed here, but convenient for now
+from matplotlib import pylab as plt
+plt.ion()
+
 import numpy as np
 import rawpy
-import glob
 from astropy.io import fits
-from matplotlib import pylab as plt
 from scipy import signal
-plt.ion()
 from tqdm import tqdm
 
 import logging
@@ -12,6 +13,16 @@ logger = logging.getLogger( 'stacker' )
 logger.setLevel( logging.DEBUG )
 ch = logging.StreamHandler()
 logger.addHandler( ch )
+
+from functools import wraps
+# this works as a decorator for a class method and will log the
+# name of the class and the method being called.
+def log_debug( f ):
+    @wraps( f )
+    def wrapper( *args, **kwargs ):
+        logger.debug( args[0].__class__.__name__ +':'+f.__name__ )
+        return f( *args, **kwargs )
+    return wrapper
 
 class StackerError( Exception ):
     pass
@@ -39,33 +50,54 @@ class Stacker( object ):
         self._method = method
 
         if type( frms ) is np.ndarray:
+            # input is a 3D np.ndarray of frames to stack
+            # Mpixel x Npixel x Nframes
             self._raw_frames = frms
         elif type( frms ) is list:
+            # input is a list of strings referring to file names
             self._frame_list = frms
-            self._raw_frames = self.read_list( frms )
+            # don't read the raw frames until needed
+            #self._raw_frames = self.load_raw_frames( frms )
         else:
             raise StackerError( 'Type not understood' )
-            
-    def read_list( self, frm_list ):
+
+    @log_debug
+    def load_raw_frames( self, frm_list ):
         """
         read a list of files specifying frames into 
         memory
         """
-        logger.debug('Stacker:read_list')
         
         raw0 = rawpy.imread( frm_list[0] )
         sz = raw0.raw_image.shape
 
-        stk = np.zeros( [sz[0], sz[1], len(frm_list) ],
+        self._raw_frames = np.zeros( [sz[0], sz[1], len(frm_list) ],
                         dtype = raw0.raw_image.dtype )
 
         # read each frame and put it into the stack
         for i,b in enumerate( tqdm(frm_list) ):
             with rawpy.imread( b ) as raw:
-                stk[:,:,i] = raw.raw_image.copy()
+                self._raw_frames[:,:,i] = raw.raw_image.copy()
 
-        return stk
+    @log_debug            
+    def get_raw_frames( self ):
+        """
+        return the raw frames. If they are not in memory, load them
+        """
 
+        if self._raw_frames is None:
+            self.load_raw_frames( self._frame_list )
+
+        return self._raw_frames
+
+    @log_debug
+    def del_raw_frames( self ):
+        """
+        remove the raw frames from memory
+        """
+        self._raw_frames = None
+
+    @log_debug
     def stack( self, method = None ):
 
         if method is None:
@@ -76,18 +108,17 @@ class Stacker( object ):
         # preprocess the frames for stacking
         pp_stk = self.preprocess()
             
-        stk = method( pp_stk, axis = 2 )
-        self._stack = stk
+        self._stack = method( pp_stk, axis = 2 )
 
+    @log_debug
     def get_stack( self ):
-        
-        logger.debug('Stacker:get_stack')
         
         if self._stack is None:
             self.stack()
 
         return self._stack
-        
+    
+    @log_debug    
     def write( self, filename, dtype = None, overwrite = False ):
         """
         write the stack to a fits file 
@@ -97,13 +128,11 @@ class Stacker( object ):
         array returned from self.get_stack()
 
         """
-        logger.debug('Stacker:write')
-
         stk = self.get_stack()
 
         self.write_frame_to_fits( filename, stk, dtype = dtype, overwrite = overwrite )
         
-
+    @log_debug
     def write_preprocess( self, filepattern = 'pp_', dtype = None, overwrite = False ):
         """
         write out each frame after applying the preprocessing corrections
@@ -111,7 +140,6 @@ class Stacker( object ):
         
         The default filepattern pp_ follows the siril convention
         """
-        logger.debug('Stacker:write_preprocess')
 
         pp_frms = self.preprocess()
 
@@ -192,7 +220,7 @@ class Stacker( object ):
         hdul = fits.HDUList( [hdu] )
         hdul.writeto( filename, overwrite = True )
         
-        
+    @log_debug    
     def preprocess( self ):
         """
         Define this preprocess method to apply to the raw
@@ -202,25 +230,23 @@ class Stacker( object ):
         Override it if you need to do something else.
         """
         
-        logger.debug('Stacker:preprocess')
-        
-        return self._raw_frames
+        return self.get_raw_frames()
 
+    @log_debug
     def postprocess( self ):
         """
         define a post-process method to apply after stacking to the 
         stacked frame, this default just returns the stack.
         """
-        logger.debug('Stacker:postprocess')
-        
-        return self._stack
-        
+                
+        return self.get_stack()
+
+    @log_debug
     def debayer( self, bayer_frame ):
         """
         remove the bayer mosaic from the raw FPA data. This method sums
         the 2x2 area to a single pixel value. 
         """
-        logger.debug('Stacker:debayer')
         
         # convolve and downsample to sum into 2x2 blocks
         kernel = np.ones([2,2])
@@ -269,19 +295,19 @@ class DarkStacker( Stacker ):
         
         self._bias_stack = bias_stack
         super().__init__( dark_frames, method = method )
-        
+
+    @log_debug
     def preprocess( self ):
         """
         remove the bias frame from each dark frame if the bias
         frame is configured
         """
-        logger.debug('DarkStacker:preprocess')
         
         if self._bias_stack is not None:
             bstk_frm = self._bias_stack.get_stack()
-            pp_frames = self._raw_frames - bstk_frm[:,:,np.newaxis]
+            pp_frames = self.get_raw_frames() - bstk_frm[:,:,np.newaxis]
         else:
-            pp_frames = self._raw_frames
+            pp_frames = self.get_raw_frames()
 
         return pp_frames
 
@@ -309,14 +335,13 @@ class FlatStacker( Stacker ):
 
         super().__init__( flat_frames, method = method )
 
+    @log_debug
     def preprocess( self ):
         """
         remove the bias and dark frame stack from each frame
         """
 
-        logger.debug('FlatStacker:preprocess')
-
-        pp_frames = self._raw_frames
+        pp_frames = self.get_raw_frames()
         
         # remove bias if input as option
         if self._bias_stack is not None:
@@ -329,12 +354,11 @@ class FlatStacker( Stacker ):
         # return - this still has the bayer mosaic
         return pp_frames
 
+    @log_debug
     def make_flat_frame( self ):
         """
         generate the flat frame to use. Does not return the flat frame.
         """
-        
-        logger.debug('FlatStacker:make_flat_frame')
         
         # debayer the image - now it's downsample 2x2 in each direction
         dimg = self.debayer( self.get_stack() )
@@ -349,13 +373,12 @@ class FlatStacker( Stacker ):
         
         self._flat = dimg / self._flat_mean
 
+    @log_debug
     def get_flat( self ):
         """
         return the flat frame as a numpy array
         """
 
-        logger.debug('FlatStacker:get_flat')
-        
         if self._flat is None:
             self.make_flat_frame()
 
@@ -388,13 +411,13 @@ class LightStacker( Stacker ):
 
         super().__init__( light_frames, method = method )
 
+    @log_debug
     def preprocess( self ):
         """
         remove bias frame stack from each frame
         remove dark frame stack from each frame
         debayer each frame
         """
-        logger.debug('LightStacker:preprocess')
 
         pp_frames = self._raw_frames
         
