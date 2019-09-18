@@ -32,6 +32,7 @@ flat_stacker = FlatStacker( flat_list ,
                             bias_stack = bias_stacker,
                             dark_stack = dark_stacker )
 flat_stacker.write('test/flat_test.fits', overwrite = True)
+flat_stacker.del_raw_frames()
 
 light_stacker = LightStacker( light_list[0:10] ,
                               bias_stack = bias_stacker,
