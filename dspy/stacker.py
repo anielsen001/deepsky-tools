@@ -487,7 +487,7 @@ class LightStacker( Stacker ):
         debayer each frame
         """
 
-        pp_frames = self._raw_frames
+        pp_frames = self.get_raw_frames()
         
         # remove bias if input as option
         if self._bias_stack is not None:
