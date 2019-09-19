@@ -224,8 +224,9 @@ class Stacker( object ):
     @log_debug
     def get_meta_json( self ):
         """
-        write the metadata of this object to a json string, at the base class Stacker
-        level. This writes out the basic information that should be needed to 
+        write the metadata of this object to a dictionary, at the base class Stacker
+        level. This dictionary will be written to a json file for saving information.
+        This writes out the basic information that should be needed to 
         recreate the stack results. Stacker objects that require other data to stack
         """
 
@@ -234,18 +235,20 @@ class Stacker( object ):
                      'method' : self._method.__name__, # this is the stacking method
                      'stacker' : self.__class__.__name__ } # this is the Stacker class name
 
-        return json.dumps( metadata )
+        return metadata
 
     @log_debug
     def write_meta_json( self, jsonname ):
         """
         write a json file contaning the meta data requried to recreate the stack. This calls
-        the get_meta_json method to convert the meta data to a string. By breaking up the 
+        the get_meta_json method to convert the meta data to a dictionary. By breaking up the 
         function calls this way, subclasses can override the get_meta_json method and also 
         call the super class get_meta_json if desired. 
         """
+        jsonstr = json.dumps( self.get_meta_json() )
+        
         with open( jsonname, 'w' ) as f:
-            f.write( self.get_meta_json() )
+            f.write( jsonstr )
         
     @log_debug    
     def preprocess( self ):
@@ -337,6 +340,23 @@ class DarkStacker( Stacker ):
             pp_frames = self.get_raw_frames()
 
         return pp_frames
+
+    @log_debug
+    def get_meta_json( self ):
+        """
+        the Dark stacker meta data should include some information about the 
+        bias stack if it was used
+        """
+
+        # get the metadata from the parent class
+        metadata = super().get_meta_json()
+
+        # add meta data based on this subclass instance
+        if self._bias_stack is not None:
+            # a bias stack was usd, so add it to the metadata dictionary
+            metadata[ 'bias stack' ] = self._bias_stack.get_meta_json()
+
+        return metadata
 
 class FlatStacker( Stacker ):
     """
