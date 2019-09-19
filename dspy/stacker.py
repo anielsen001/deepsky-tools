@@ -7,6 +7,7 @@ import rawpy
 from astropy.io import fits
 from scipy import signal
 from tqdm import tqdm
+import json
 
 import logging
 logger = logging.getLogger( 'stacker' )
@@ -219,6 +220,32 @@ class Stacker( object ):
         
         hdul = fits.HDUList( [hdu] )
         hdul.writeto( filename, overwrite = True )
+
+    @log_debug
+    def get_meta_json( self ):
+        """
+        write the metadata of this object to a json string, at the base class Stacker
+        level. This writes out the basic information that should be needed to 
+        recreate the stack results. Stacker objects that require other data to stack
+        """
+
+        # format the metadata into a dictionary for serialization
+        metadata = { 'files' : self._frame_list, # this is the list of files used
+                     'method' : self._method.__name__, # this is the stacking method
+                     'stacker' : self.__class__.__name__ } # this is the Stacker class name
+
+        return json.dumps( metadata )
+
+    @log_debug
+    def write_meta_json( self, jsonname ):
+        """
+        write a json file contaning the meta data requried to recreate the stack. This calls
+        the get_meta_json method to convert the meta data to a string. By breaking up the 
+        function calls this way, subclasses can override the get_meta_json method and also 
+        call the super class get_meta_json if desired. 
+        """
+        with open( jsonname, 'w' ) as f:
+            f.write( self.get_meta_json() )
         
     @log_debug    
     def preprocess( self ):
@@ -440,8 +467,7 @@ class LightStacker( Stacker ):
             pp_frames = db_pp / flt[:,:,np.newaxis]
             
         return pp_frames
-        
-            
+
 if __name__=='__main__' and False:
 
     if False: 
