@@ -430,6 +430,28 @@ class FlatStacker( Stacker ):
             self.make_flat_frame()
 
         return self._flat
+
+    @log_debug
+    def get_meta_json( self ):
+        """
+        the Dark stacker meta data should include some information about the 
+        bias stack if it was used
+        """
+
+        # get the metadata from the parent class
+        metadata = super().get_meta_json()
+
+        # add meta data based on this subclass instance
+        if self._bias_stack is not None:
+            # a bias stack was usd, so add it to the metadata dictionary
+            metadata[ 'bias stack' ] = self._bias_stack.get_meta_json()
+
+        if self._dark_stack is not None:
+            # a dark stack was used, so add it to the metadata dictionary
+            metadata[ 'dark stack' ] = self._dark_stack.get_meta_json()
+
+        return metadata
+
         
     
 class LightStacker( Stacker ):
@@ -441,8 +463,7 @@ class LightStacker( Stacker ):
     _dark_stack = None
     _flat_stack = None
 
-    method = None # stacking method
-    reg_method = None # registration method to register the frames
+    _reg_method = None # registration method to register the frames
 
     def __init__( self,
                   light_frames,
@@ -487,6 +508,32 @@ class LightStacker( Stacker ):
             pp_frames = db_pp / flt[:,:,np.newaxis]
             
         return pp_frames
+
+    @log_debug
+    def get_meta_json( self ):
+        """
+        the Dark stacker meta data should include some information about the 
+        bias stack if it was used
+        """
+
+        # get the metadata from the parent class
+        metadata = super().get_meta_json()
+
+        # add meta data based on this subclass instance
+        if self._bias_stack is not None:
+            # a bias stack was usd, so add it to the metadata dictionary
+            metadata[ 'bias stack' ] = self._bias_stack.get_meta_json()
+
+        if self._dark_stack is not None:
+            # a dark stack was used, so add it to the metadata dictionary
+            metadata[ 'dark stack' ] = self._dark_stack.get_meta_json()
+
+        if self._flat_stack is not None:
+            # a dark stack was used, so add it to the metadata dictionary
+            metadata[ 'flat stack' ] = self._flat_stack.get_meta_json()
+        
+        return metadata
+
 
 if __name__=='__main__' and False:
 
