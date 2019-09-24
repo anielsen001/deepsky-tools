@@ -33,7 +33,7 @@ class Stacker( object ):
     a generic stacker object
     """
     # method used to stack frames default is np.median
-    _method = None
+    _method = np.median
 
     # list of raw files containing each frame to put into the stack
     _frame_list = None
@@ -42,7 +42,10 @@ class Stacker( object ):
     _raw_frames = None
 
     # 2-D array of output from stacking process
-    _stack = None     
+    _stack = None
+
+    # file saved to disk containing a 2-D stacked set fo frames
+    _stack_file = None
     
     def __init__( self,
                   frms,
@@ -59,6 +62,9 @@ class Stacker( object ):
             self._frame_list = frms
             # don't read the raw frames until needed
             #self._raw_frames = self.load_raw_frames( frms )
+        elif type( frms ) is str:
+            # input is a file containing already stacked data
+            self.stack_file = frms
         else:
             raise StackerError( 'Type not understood' )
 
@@ -79,7 +85,7 @@ class Stacker( object ):
         for i,b in enumerate( tqdm(frm_list) ):
             with rawpy.imread( b ) as raw:
                 self._raw_frames[:,:,i] = raw.raw_image.copy()
-
+                
     @log_debug            
     def get_raw_frames( self ):
         """
@@ -98,8 +104,22 @@ class Stacker( object ):
         """
         self._raw_frames = None
 
+    # raw_frames = property( get_raw_frames, load_raw_frames, del_raw_frames )
+
+    @property
+    def stack_file( self ):
+        """ return the stack file name """
+        return self._stack_file
+
+    @stack_file.setter
+    def stack_file( self, filename ):
+        """ set the stack file name """
+        if type( filename ) is not str:
+            raise StackerError( 'stack file name must be a string' )
+        self._stack_file = filename
+    
     @log_debug
-    def stack( self, method = None ):
+    def make_stack( self, method = None ):
 
         if method is None:
             method = self._method
@@ -111,11 +131,12 @@ class Stacker( object ):
             
         self._stack = method( pp_stk, axis = 2 )
 
-    @log_debug
-    def get_stack( self ):
+    # can't decorate a property?
+    @property
+    def stack( self ):
         
         if self._stack is None:
-            self.stack()
+            self.make_stack()
 
         return self._stack
     
@@ -126,10 +147,10 @@ class Stacker( object ):
         
         dtype specifies the data type to write out. It should be one of numpy's
         acceptable types. The default is None which will use the type of the 
-        array returned from self.get_stack()
+        array returned from self.stack
 
         """
-        stk = self.get_stack()
+        stk = self.stack
 
         self.write_frame_to_fits( filename, stk, dtype = dtype, overwrite = overwrite )
         
@@ -221,6 +242,21 @@ class Stacker( object ):
         hdul = fits.HDUList( [hdu] )
         hdul.writeto( filename, overwrite = True )
 
+    def read_stack_from_fits( self ):
+        """
+        read a 2-D stack from a fits file into memory
+        requires that self._stack_file be set
+        """
+
+        hdul = fits.open( self.stack_file )
+        
+        self._stack = hdul[0].data
+        
+        # this will be a string name stored in the file, not the function
+        # that should be passed when creating
+        self._method = hdul[0].header['method'] 
+        
+
     @log_debug
     def get_meta_json( self ):
         """
@@ -269,7 +305,7 @@ class Stacker( object ):
         stacked frame, this default just returns the stack.
         """
                 
-        return self.get_stack()
+        return self.stack
 
     @log_debug
     def debayer( self, bayer_frame ):
@@ -334,7 +370,7 @@ class DarkStacker( Stacker ):
         """
         
         if self._bias_stack is not None:
-            bstk_frm = self._bias_stack.get_stack()
+            bstk_frm = self._bias_stack.stack
             pp_frames = self.get_raw_frames() - bstk_frm[:,:,np.newaxis]
         else:
             pp_frames = self.get_raw_frames()
@@ -392,11 +428,11 @@ class FlatStacker( Stacker ):
         
         # remove bias if input as option
         if self._bias_stack is not None:
-            pp_frames = pp_frames - self._bias_stack.get_stack()[:,:,np.newaxis]
+            pp_frames = pp_frames - self._bias_stack.stack[:,:,np.newaxis]
         
         # remove dark if input as option
         if self._dark_stack is not None:
-            pp_frames = pp_frames - self._dark_stack.get_stack()[:,:,np.newaxis]
+            pp_frames = pp_frames - self._dark_stack.stack[:,:,np.newaxis]
            
         # return - this still has the bayer mosaic
         return pp_frames
@@ -408,7 +444,7 @@ class FlatStacker( Stacker ):
         """
         
         # debayer the image - now it's downsample 2x2 in each direction
-        dimg = self.debayer( self.get_stack() )
+        dimg = self.debayer( self.stack )
 
         # normalize the dmin to unity gain
         ### this step scales all the flat values to very small numbers
@@ -491,11 +527,11 @@ class LightStacker( Stacker ):
         
         # remove bias if input as option
         if self._bias_stack is not None:
-            pp_frames = pp_frames - self._bias_stack.get_stack()[:,:,np.newaxis]
+            pp_frames = pp_frames - self._bias_stack.stack[:,:,np.newaxis]
         
         # remove dark if input as option
         if self._dark_stack is not None:
-            pp_frames = pp_frames - self._dark_stack.get_stack()[:,:,np.newaxis]
+            pp_frames = pp_frames - self._dark_stack.stack[:,:,np.newaxis]
            
         if self._flat_stack is not None:
             # in order to flatten the frames, we must debayer them
