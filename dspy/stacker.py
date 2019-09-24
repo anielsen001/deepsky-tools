@@ -202,7 +202,7 @@ class Stacker( object ):
             if ( frame.max() >= np.iinfo( dtype ).max or\
                  frame.min() <= np.iinfo( dtype ).min ):
                 # data is outside range supported by datatype
-                raise StackError('Cannot cast to requested type, data ouside range')
+                raise StackerError('Cannot cast to requested type, data ouside range')
             
         # else: the are the same type, so we don't have to do anything
 
