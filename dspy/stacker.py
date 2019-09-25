@@ -169,6 +169,8 @@ class Stacker( object ):
 
         """
         stk = self.stack
+        
+        self.stack_file = filename
 
         self.write_frame_to_fits( filename, stk, dtype = dtype, overwrite = overwrite )
         
