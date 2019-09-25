@@ -51,7 +51,7 @@ class Stacker( object ):
                   frms,
                   method = np.median ):
         
-        self._method = method
+        self.method = method
 
         if type( frms ) is np.ndarray:
             # input is a 3D np.ndarray of frames to stack
@@ -122,23 +122,41 @@ class Stacker( object ):
     def make_stack( self, method = None ):
 
         if method is None:
-            method = self._method
+            method = self.method
 
-        logger.debug('Stacker:stack with: ' + self._method.__name__ )
+        logger.debug('Stacker:stack with: ' + self.method.__name__ )
             
         # preprocess the frames for stacking
         pp_stk = self.preprocess()
             
-        self._stack = method( pp_stk, axis = 2 )
+        self.stack = method( pp_stk, axis = 2 )
 
     # can't decorate a property?
     @property
-    def stack( self ):
+    def stack( self ):            
         
         if self._stack is None:
-            self.make_stack()
+            if self.stack_file is None:
+                # if no stack file is listed, then generate a stack
+                self.make_stack()
+            else:
+                # read from the stack file
+                self.read_stack_from_fits()
 
         return self._stack
+
+    @stack.setter
+    def stack( self, stk ):
+        """ set the stack, must be a 2D numpy array """
+        self._stack = stk
+
+    @property
+    def method( self ):
+        return self._method
+
+    @method.setter
+    def method( self, val ):
+        self._method = val
     
     @log_debug    
     def write( self, filename, dtype = None, overwrite = False ):
@@ -250,11 +268,11 @@ class Stacker( object ):
 
         hdul = fits.open( self.stack_file )
         
-        self._stack = hdul[0].data
+        self.stack = hdul[0].data
         
         # this will be a string name stored in the file, not the function
         # that should be passed when creating
-        self._method = hdul[0].header['method'] 
+        self.method = hdul[0].header['method'] 
         
 
     @log_debug
