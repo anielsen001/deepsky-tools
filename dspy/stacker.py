@@ -260,7 +260,7 @@ class Stacker( object ):
         # 
         
         hdul = fits.HDUList( [hdu] )
-        hdul.writeto( filename, overwrite = True )
+        hdul.writeto( filename, overwrite = overwrite )
 
     def read_stack_from_fits( self ):
         """
