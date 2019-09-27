@@ -1,0 +1,14 @@
+
+From:
+http://astrometry.net/doc/build.html#build
+
+As of April 2019, the script doc/install_astrometry_on_linux.sh will install all dependencies along with astrometry.net on Linux, and download 4200/ index files.
+
+This script did not install the netpbm-dev or the wcslib-dev development packages. Both installed via synaptic.
+
+make
+make py
+make extra
+make install  # to put it in /usr/local/astrometry
+# or:
+make install INSTALL_DIR=/some/other/place
