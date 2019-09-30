@@ -286,10 +286,17 @@ class Stacker( object ):
         recreate the stack results. Stacker objects that require other data to stack
         """
 
-        # format the metadata into a dictionary for serialization
-        metadata = { 'files' : self._frame_list, # this is the list of files used
-                     'method' : self._method.__name__, # this is the stacking method
-                     'stacker' : self.__class__.__name__ } # this is the Stacker class name
+        metadata = { 'stacker' : self.__class__.__name__ } # put the class name in the metadata
+
+        try:
+            metadata[ 'method' ] = self._method.__name__
+        except AttributeError:
+            # there is no __name__ attribute
+            # convert whatever exists to a string
+            metadata[ 'method' ] = str( self._method )
+
+        if self._frame_list is not None:
+            metadata[ 'files' ] = self._frame_list
 
         return metadata
 
