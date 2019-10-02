@@ -9,6 +9,9 @@ from scipy import signal
 from tqdm import tqdm
 import json
 
+import socket
+import datetime
+
 import logging
 logger = logging.getLogger( 'stacker' )
 logger.setLevel( logging.DEBUG )
@@ -252,12 +255,20 @@ class Stacker( object ):
             logger.warning('Casting from %s to %s will reduce precision'%(str(frame.dtype), str(dtype)))
 
         hdu = fits.PrimaryHDU( frame.astype( dtype ) )
-            
+
+        #
         # add some informaton to the header
+        #
         hdr = hdu.header
+        
         # name of stacking method
-        hdr['method'] = self._method.__name__ 
-        # 
+        hdr['method'] = self._method.__name__
+        
+        # hostname of system
+        hdr['hostname'] = socket.gethostname()
+
+        # datetime of file creation
+        hdr['datetime'] = str( datetime.datetime.now() )
         
         hdul = fits.HDUList( [hdu] )
         hdul.writeto( filename, overwrite = overwrite )
@@ -286,8 +297,15 @@ class Stacker( object ):
         recreate the stack results. Stacker objects that require other data to stack
         """
 
-        metadata = { 'stacker' : self.__class__.__name__ } # put the class name in the metadata
+        # put the class name in the metadata
+        metadata = { 'stacker' : self.__class__.__name__ } 
 
+        # put the hostname into the metadata
+        metadata['hostname'] = socket.gethostname()
+
+        # put the date into the metadata
+        metadata['datetime'] = str( datetime.datetime.today() )
+        
         try:
             metadata[ 'method' ] = self._method.__name__
         except AttributeError:
