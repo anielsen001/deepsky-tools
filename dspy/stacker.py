@@ -18,6 +18,8 @@ logger.setLevel( logging.DEBUG )
 ch = logging.StreamHandler()
 logger.addHandler( ch )
 
+from metadata import Metadata
+
 from functools import wraps
 # this works as a decorator for a class method and will log the
 # name of the class and the method being called.
@@ -49,11 +51,15 @@ class Stacker( object ):
 
     # file saved to disk containing a 2-D stacked set fo frames
     _stack_file = None
+
+    # metadata object to hold associated metadata
+    metadata = Metadata()
     
     def __init__( self,
                   frms,
                   method = np.median ):
-        
+
+        # set the method 
         self.method = method
 
         if type( frms ) is np.ndarray:
@@ -71,6 +77,12 @@ class Stacker( object ):
         else:
             raise StackerError( 'Type not understood' )
 
+        # populate metadata
+        # we are going to be lazy about populating metadata until we start doing things
+        # put the class name in the metadata
+        self.metadata['stacker']  = ( self.__class__.__name__, 'stacker class name' ) 
+
+
     @log_debug
     def load_raw_frames( self, frm_list ):
         """
@@ -86,6 +98,11 @@ class Stacker( object ):
 
         # read each frame and put it into the stack
         for i,b in enumerate( tqdm(frm_list) ):
+            # populate metadata with frame name
+            kw = 'frm' + str(i).rjust(5,'0')
+            self.metadata[ kw ] = b
+            
+            # read each frame
             with rawpy.imread( b ) as raw:
                 self._raw_frames[:,:,i] = raw.raw_image.copy()
                 
@@ -127,8 +144,19 @@ class Stacker( object ):
         if method is None:
             method = self.method
 
+        # write out debug information
         logger.debug('Stacker:stack with: ' + self.method.__name__ )
-            
+
+        # when we stack update the metadata to hold the method used for
+        # creating the stack
+        self.metadata['method'] = ( self.method.__name__, 'method used for stacking' )
+
+        # add the hostname where stacking occurred
+        self.metadata['hostname'] = ( socket.gethostname(), 'hostname for stacking' )
+
+        # add the date/time of stacking
+        self.metadata['datetime'] = ( str( datetime.datetime.now() ) , 'date and time of stacking' )
+        
         # preprocess the frames for stacking
         pp_stk = self.preprocess()
             
@@ -159,6 +187,7 @@ class Stacker( object ):
 
     @method.setter
     def method( self, val ):
+        # set the method 
         self._method = val
     
     @log_debug    
@@ -260,16 +289,9 @@ class Stacker( object ):
         # add some informaton to the header
         #
         hdr = hdu.header
-        
-        # name of stacking method
-        hdr['method'] = self._method.__name__
-        
-        # hostname of system
-        hdr['hostname'] = socket.gethostname()
 
-        # datetime of file creation
-        hdr['datetime'] = str( datetime.datetime.now() )
-        
+        hdr.extend( self.metadata )
+                
         hdul = fits.HDUList( [hdu] )
         hdul.writeto( filename, overwrite = overwrite )
 
@@ -285,7 +307,10 @@ class Stacker( object ):
         
         # this will be a string name stored in the file, not the function
         # that should be passed when creating
-        self.method = hdul[0].header['method'] 
+        self.method = hdul[0].header['method']
+
+        # put this method into the metadata attribute as well
+        self.metadata['method'] = ( self.method, 'method used for stacking' )
         
 
     @log_debug
