@@ -30,6 +30,15 @@ def log_debug( f ):
         return f( *args, **kwargs )
     return wrapper
 
+# use as a decorator to warn that a method or function is deprecated
+def warn_deprecated( f ):
+    @wraps( f )
+    def wrapper( *args, **kwargs ):
+        logger.warn( f.__name__ + ' is deprecated and may be removed.' )
+        return f( *args, **kwargs )
+    return wrapper
+    
+
 class StackerError( Exception ):
     pass
 
@@ -313,7 +322,7 @@ class Stacker( object ):
         self.metadata['method'] = ( self.method, 'method used for stacking' )
         
 
-    @log_debug
+    @warn_deprecated
     def get_meta_json( self ):
         """
         write the metadata of this object to a dictionary, at the base class Stacker
@@ -343,7 +352,7 @@ class Stacker( object ):
 
         return metadata
 
-    @log_debug
+    @warn_deprecated
     def write_meta_json( self, jsonname ):
         """
         write a json file contaning the meta data requried to recreate the stack. This calls
