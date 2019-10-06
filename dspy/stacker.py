@@ -8,7 +8,7 @@ from astropy.io import fits
 from scipy import signal
 from tqdm import tqdm
 import json
-
+import exifread
 import socket
 import datetime
 
@@ -98,15 +98,55 @@ class Stacker( object ):
         read a list of files specifying frames into 
         memory
         """
-        
+
+        # read the first frame in the list and get the image size
+        # use this image size to allocate memory for holding all
+        # the memory
         raw0 = rawpy.imread( frm_list[0] )
         sz = raw0.raw_image.shape
 
+        # read the EXIF metadata from the first file and use this to populate
+        # the meta data for the stack
+        # md0 is metadata of file 0
+        # definitions may be found here:
+        # https://www.exif.org/Exif2-2.PDF
+        # https://www.sno.phy.queensu.ca/~phil/exiftool/TagNames/EXIF.html
+        with open( frm_list[0], 'rb' ) as f:
+            md0 = exifread.process_file( f )
+
+        # get the camera make and model
+        self.metadata['camera'] = ' '.join( [ md0['Image Make'].values, md0['Image Model'].values ] )
+
+        # get the date/time of the image capture - string type
+        self.metadata['collect datetime'] = ( md0['Image DateTimeOriginal'].values,
+                                              'collection date and time' )
+
+        # get the camera imaging parameters
+        # F number - ratio type
+        self.metadata['f_number'] = ( md0['Image FNumber'].values[0].num /\
+                                      md0['Image FNumber'].values[0].den,
+                                      'F number of camera collection' )
+        # exposure time in seconds, convert from ratio to floating point
+        self.metadata['exposure_time'] = ( md0['Image ExposureTime'].values[0].num / \
+                                           md0['Image ExposureTime'].values[0].den,
+                                           'Exposure time in seconds' )
+        # ISO - integer type
+        self.metadata['ISO'] = ( md0['Image ISOSpeedRatings'].values[0],
+                                 'ISO setting of camera' )
+        # focal length - ratio type
+        self.metadata['focal_length'] = ( md0['Image FocalLength'].values[0].num /\
+                                          md0['Image FocalLength'].values[0].den,
+                                          'Focal length of camera' )
+        
+        # allocate array/memory to hold the raw data from each frame
         self._raw_frames = np.zeros( [sz[0], sz[1], len(frm_list) ],
                         dtype = raw0.raw_image.dtype )
 
         # read each frame and put it into the stack
         for i,b in enumerate( tqdm(frm_list) ):
+            # b is the file name from the list
+            # i is the index in the list
+            
             # populate metadata with frame name
             kw = 'frm' + str(i).rjust(5,'0')
             self.metadata[ kw ] = b
