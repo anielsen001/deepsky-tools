@@ -18,7 +18,7 @@ logger.setLevel( logging.DEBUG )
 ch = logging.StreamHandler()
 logger.addHandler( ch )
 
-from metadata import Metadata
+from .metadata import Metadata
 
 from functools import wraps
 # this works as a decorator for a class method and will log the
