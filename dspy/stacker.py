@@ -207,9 +207,16 @@ class Stacker( object ):
         self.metadata['datetime'] = ( str( datetime.datetime.now() ) , 'date and time of stacking' )
         
         # preprocess the frames for stacking
-        pp_stk = self.preprocess()
-            
-        self.stack = method( pp_stk, axis = 2 )
+        prep_stk = self.preprocess()
+
+        # stack the frames
+        self._stack = method( prep_stk, axis = 2 )
+
+        # postprocess the stack after stacking
+        post_stk = self.postprocess()
+
+        # set the stack frame property
+        self._stack = post_stk
 
     # can't decorate a property?
     @property
@@ -424,7 +431,7 @@ class Stacker( object ):
         stacked frame, this default just returns the stack.
         """
                 
-        return self.stack
+        return self._stack
 
     @log_debug
     def debayer( self, bayer_frame ):
@@ -570,10 +577,18 @@ class FlatStacker( Stacker ):
         # return - this still has the bayer mosaic
         return pp_frames
 
+    @property
+    def flat( self ):
+        if self._flat is None:
+            self.make_flat_frame()
+
+        return self._flat
+
     @log_debug
     def make_flat_frame( self ):
         """
         generate the flat frame to use. Does not return the flat frame.
+        This frame is debayered.
         """
         
         # debayer the image - now it's downsample 2x2 in each direction
@@ -589,16 +604,13 @@ class FlatStacker( Stacker ):
         
         self._flat = dimg / self._flat_mean
 
+        
     @log_debug
     def get_flat( self ):
         """
         return the flat frame as a numpy array
         """
-
-        if self._flat is None:
-            self.make_flat_frame()
-
-        return self._flat
+        return self.flat
 
     @log_debug
     def get_meta_json( self ):
@@ -677,6 +689,8 @@ class LightStacker( Stacker ):
             pp_frames = db_pp / flt[:,:,np.newaxis]
             
         return pp_frames
+
+    
 
     @log_debug
     def get_meta_json( self ):
