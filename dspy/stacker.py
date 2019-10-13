@@ -469,6 +469,9 @@ class BiasStacker( Stacker ):
 class DarkStacker( Stacker ):
     """
     Stack the dark frames to produce a clean dark frame
+
+    The dark stack does not need to have the bias frame removed. Track where 
+    the bias is removed to make sure that it's not removed twice.
     """
     # bias_stack is an object of the BiasStacker class
     _bias_stack = None
@@ -517,8 +520,18 @@ class FlatStacker( Stacker ):
     """
     stack the flat frames to produce a flat frame
 
-    the stacked flat frame needs to be set to unity gain, but
+    The stacked flat frame needs to be set to a gain, but
     we need to account for the Bayer mosaic before we do that.
+
+    If you use a dark stack here, it must be generated using dark frames
+    with the same exposure time as the flat frames. Typically the flat
+    frames have much shorter exposure times than the light frames, so the 
+    integrated dark current will be different in both cases.
+
+    Examples of exposure times from cell phone camera Motorola Moto X4
+    flat frames : 0.05 sec
+    bias frames : 1.06e-5 sec
+    light frames (maximum possible) : 0.3 sec
     """
     # these are objects of BiasStacker, DarkStacker and FlatStacker
     _bias_stack = None
@@ -540,7 +553,8 @@ class FlatStacker( Stacker ):
     @log_debug
     def preprocess( self ):
         """
-        remove the bias and dark frame stack from each frame
+        Remove the bias and dark frame stack from each frame
+
         """
 
         pp_frames = self.get_raw_frames()
