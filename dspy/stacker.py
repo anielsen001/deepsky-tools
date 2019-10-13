@@ -143,7 +143,7 @@ class Stacker( object ):
                         dtype = raw0.raw_image.dtype )
 
         # read each frame and put it into the stack
-        for i,b in enumerate( tqdm(frm_list) ):
+        for i,b in enumerate( tqdm(frm_list,desc = 'Reading frames: ') ):
             # b is the file name from the list
             # i is the index in the list
             
@@ -268,7 +268,7 @@ class Stacker( object ):
 
         nframes = self._raw_frames.shape[2]
 
-        for iframe in tqdm( range( nframes ) ):
+        for iframe in tqdm( range( nframes ), desc = 'Write pp frames: ' ):
             fname = filepattern + str(iframe).rjust(5,'0') + '.fits'
             
             hdu = fits.PrimaryHDU( np.squeeze( pp_frms[:,:,iframe] ) )
