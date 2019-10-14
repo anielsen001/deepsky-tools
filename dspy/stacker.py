@@ -1,6 +1,3 @@
-import glob # not needed here, but convenient for now
-from matplotlib import pylab as plt
-plt.ion()
 
 import numpy as np
 import rawpy
@@ -11,6 +8,8 @@ import json
 import exifread
 import socket
 import datetime
+
+from numba import jit,prange
 
 import logging
 logger = logging.getLogger( 'stacker' )
@@ -188,6 +187,7 @@ class Stacker( object ):
         self._stack_file = filename
     
     @log_debug
+    @jit( parallel = True )
     def make_stack( self, method = None ):
 
         if method is None:
@@ -271,6 +271,7 @@ class Stacker( object ):
         The default filepattern pp_ follows the siril convention
         """
 
+        # this can fail is the preprocess method needs too much memory
         pp_frms = self.preprocess()
 
         nframes = self._raw_frames.shape[2]
@@ -661,7 +662,7 @@ class LightStacker( Stacker ):
         super().__init__( light_frames, method = method )
 
     @log_debug
-    def preprocess( self ):
+    def pre_proc( self ):
         """
         remove bias frame stack from each frame
         remove dark frame stack from each frame
@@ -682,6 +683,7 @@ class LightStacker( Stacker ):
             # in order to flatten the frames, we must debayer them
             # kernel = np.ones( [2,2] )
             # db_pp = signal.convolve( pp_frames, kernel[:,:,np.newaxis] ,'same')[::2,::2,:]
+            # this will run out of memory if there are too many frames
             db_pp = self.debayer( pp_frames )
             
             # flatten each
@@ -690,7 +692,66 @@ class LightStacker( Stacker ):
             
         return pp_frames
 
-    
+    def pre_proc_single( self ):
+        """
+        preprocess each frame separately in a loop, to conserve memory
+
+        assumes, dark frame and flat frame correction only
+        """
+        # get teh frames to preprocess
+        pp_frames = self.get_raw_frames()
+
+        L,M,N = pp_frames.shape
+
+        # get the flat frame
+        flt = self._flat_stack.get_flat()
+
+        pp_out = np.zeros( [ int(L/2), int(M/2), N ] ) 
+
+        for ifrm in prange( N ):
+            # remove bias
+            ppf = np.squeeze(pp_frames[:,:,ifrm]) - self._dark_stack.stack
+
+            # debayer
+            ppfd = self.debayer( ppf )
+
+            # flatten
+            ppfdf = ppfd / flt
+
+            pp_out[ :, :, ifrm ] = ppfdf
+
+        return pp_out
+                    
+    # this allows for easy swapping of pre-process method
+    preprocess = pre_proc_single
+
+    @log_debug
+    def post_proc( self ):
+        """
+        remove bias from final stack
+        remove dark from final stack
+        debayer final stack
+        flatten final stack
+        """
+        # remove bias if input as option
+        if self._bias_stack is not None:
+            self._stack = self._stack - self._bias_stack.stack
+        
+        # remove dark if input as option
+        if self._dark_stack is not None:
+            self._stack = self._stack - self._dark_stack.stack
+
+        if self._flat_stack is not None:
+            # in order to flatten the frames, we must debayer them
+            # kernel = np.ones( [2,2] )
+            # db_pp = signal.convolve( pp_frames, kernel[:,:,np.newaxis] ,'same')[::2,::2,:]
+            self._stack = self.debayer( self._stack )
+            
+            # flatten each
+            flt = self._flat_stack.get_flat()
+            self._stack = self._stack / flt
+
+        return self._stack
 
     @log_debug
     def get_meta_json( self ):
@@ -718,34 +779,3 @@ class LightStacker( Stacker ):
         return metadata
 
 
-if __name__=='__main__' and False:
-
-    if False: 
-        bias_list = glob.glob( '/data/stars/biases-2019-06-02/iso800/Bias*.dng' )
-        dark_list = glob.glob( '/data/stars/darks-2019-05-29/iso800/Darks*.dng' )
-        flat_list = glob.glob( '/data/stars/2019-08-29/f1/Lights*.dng' )
-        light_list = glob.glob( '/data/stars/2019-08-29/s1/Lights*.dng' )
-
-    if True:
-        bias_list = glob.glob( '/home/apn/data/stars/biases-2019-06-02/iso800/Bias*.dng' )
-        dark_list = glob.glob( '/home/apn/data/stars/darks-2019-05-29/iso800/Darks*.dng' )
-        flat_list = glob.glob( '/home/apn/data/stars/flats-2019-06-01/iso800/Flats*.dng' )
-        light_list = glob.glob( '/home/apn/data/stars/lights-2019-06-02/ursa_major/Lights*.dng' )
-
-    bias_stacker = BiasStacker( bias_list[0:10] )
-    
-    dark_stacker = DarkStacker( dark_list[0:10],
-                                bias_stack = bias_stacker )
-    
-    flat_stacker = FlatStacker( flat_list[0:10] ,
-                                bias_stack = bias_stacker,
-                                dark_stack = dark_stacker )
-
-    light_stacker = LightStacker( light_list[0:10] ,
-                                  bias_stack = bias_stacker,
-                                  dark_stack = dark_stacker,
-                                  flat_stack = flat_stacker,
-                                  method = np.sum,
-                                  reg_method = None )
-    
-    frm = light_stacker.preprocess() 
