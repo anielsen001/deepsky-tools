@@ -3,7 +3,7 @@ import numpy as np
 import rawpy
 from astropy.io import fits
 from scipy import signal
-from tqdm import tqdm
+from tqdm import tqdm, trange
 import json
 import exifread
 import socket
@@ -70,16 +70,21 @@ class Stacker( object ):
         # set the method 
         self.method = method
 
-        if type( frms ) is np.ndarray:
+        if isinstance( frms, np.ndarray ): 
             # input is a 3D np.ndarray of frames to stack
             # Mpixel x Npixel x Nframes
             self._raw_frames = frms
-        elif type( frms ) is list:
+        elif isinstance( frms, list ): 
             # input is a list of strings referring to file names
             self._frame_list = frms
             # don't read the raw frames until needed
             #self._raw_frames = self.load_raw_frames( frms )
-        elif type( frms ) is str:
+
+            if not frms:
+                # input list is empty
+                raise StackerError( 'Input list of file names is empty' )
+            
+        elif isinstance( frms, str ): 
             # input is a file containing already stacked data
             self.stack_file = frms
         else:
@@ -97,6 +102,9 @@ class Stacker( object ):
         read a list of files specifying frames into 
         memory
         """
+        if not frm_list:
+            # frm_list is empty, raise an exception
+            raise StackerError( 'Frames to stack must not be empty' )
 
         # read the first frame in the list and get the image size
         # use this image size to allocate memory for holding all
@@ -142,17 +150,36 @@ class Stacker( object ):
                         dtype = raw0.raw_image.dtype )
 
         # read each frame and put it into the stack
-        for i,b in enumerate( tqdm(frm_list,desc = 'Reading frames: ') ):
+
+        # we may encounter a bad frame, track it with this list
+        bad_frm_idx = list() 
+        t_enum_list = trange(  len( frm_list ), desc = 'Reading Frames:', leave = True ) 
+        #for i,b in enumerate( tqdm(frm_list,desc = 'Reading frames: ') ):
+        for i in t_enum_list:
             # b is the file name from the list
             # i is the index in the list
+            b = frm_list[i]
+            t_enum_list.set_description( 'Reading frame (%s)'%b )
             
             # populate metadata with frame name
             kw = 'frm' + str(i).rjust(5,'0')
             self.metadata[ kw ] = b
             
-            # read each frame
-            with rawpy.imread( b ) as raw:
-                self._raw_frames[:,:,i] = raw.raw_image.copy()
+            try: 
+                with rawpy.imread( b ) as raw:
+                    self._raw_frames[:,:,i] = raw.raw_image.copy()
+            except:
+                # an error occured reading the file, track this as a bad file
+                bad_frm_idx.append( i )
+
+        if bad_frm_idx:
+            # if any bad frames were encountered, remove them from the stack
+
+            # set diff to get the good frames
+            good_frm_idx = np.setdiff1d( np.arange( len(frm_list ) ), bad_frm_idx )
+
+            # keep only the good frames in the stack
+            self._raw_frames = self._raw_frames[ :, :, good_frm_idx ] 
                 
     @log_debug            
     def get_raw_frames( self ):
