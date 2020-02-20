@@ -62,6 +62,9 @@ class Stacker( object ):
 
     # metadata object to hold associated metadata
     metadata = Metadata()
+
+    # need per-frame metadata also - this is a list of Metadata objects
+    _frm_meta = list()
     
     def __init__( self,
                   frms,
@@ -96,7 +99,7 @@ class Stacker( object ):
         self.metadata['stacker']  = ( self.__class__.__name__, 'stacker class name' ) 
 
 
-    @log_debug
+    # @log_debug
     def load_raw_frames( self, frm_list ):
         """
         read a list of files specifying frames into 
@@ -149,6 +152,9 @@ class Stacker( object ):
         self._raw_frames = np.zeros( [sz[0], sz[1], len(frm_list) ],
                         dtype = raw0.raw_image.dtype )
 
+        # initialize the list of per-frame metadata
+        self._frm_meta = [ Metadata() for _i in frm_list ]
+
         # read each frame and put it into the stack
 
         # we may encounter a bad frame, track it with this list
@@ -161,10 +167,33 @@ class Stacker( object ):
             b = frm_list[i]
             t_enum_list.set_description( 'Reading frame (%s)'%b )
             
-            # populate metadata with frame name
+            # populate overall metadata with frame name
             kw = 'frm' + str(i).rjust(5,'0')
             self.metadata[ kw ] = b
             
+            # read the exif meta data from the frame
+            try:
+                with open( b, 'rb' ) as f:
+                    mdf = exifread.process_file ( f )
+
+                # assign metadata for this frame
+                # image collect time
+                self._frm_meta[i]['img_time'] = ( mdf['Image DateTimeOriginal'].values,
+                                                  'image date and time' )
+                # exposure time in seconds, convert from ratio to floating point
+                self._frm_meta[i]['exp_time'] = ( mdf['Image ExposureTime'].values[0].num / \
+                                                  mdf['Image ExposureTime'].values[0].den,
+                                                  'Exposure time in seconds' )
+                self._frm_meta[i]['origname'] = (b, 'Original file name ')
+                
+            except:
+                # an error occured getting meta data, treat as bad file
+                bad_frm_idx.append( i )
+
+                # skip reading binary image data if a bad frame
+                continue
+
+            # read the image data
             try: 
                 with rawpy.imread( b ) as raw:
                     self._raw_frames[:,:,i] = raw.raw_image.copy()
@@ -179,7 +208,12 @@ class Stacker( object ):
             good_frm_idx = np.setdiff1d( np.arange( len(frm_list ) ), bad_frm_idx )
 
             # keep only the good frames in the stack
-            self._raw_frames = self._raw_frames[ :, :, good_frm_idx ] 
+            self._raw_frames = self._raw_frames[ :, :, good_frm_idx ]
+
+            # clean up the per-frame meta data as well
+            # https://stackoverflow.com/questions/11303225/how-to-remove-multiple-indexes-from-a-list-at-the-same-time
+            for bad_idx in sorted( bad_frm_idx, reverse = True ):
+                del self._frm_meta[ bad_idx ]
                 
     @log_debug            
     def get_raw_frames( self ):
@@ -289,7 +323,7 @@ class Stacker( object ):
 
         self.write_frame_to_fits( filename, stk, dtype = dtype, overwrite = overwrite )
         
-    @log_debug
+    # @log_debug
     def write_preprocess( self, filepattern = 'pp_', dtype = None, overwrite = False ):
         """
         write out each frame after applying the preprocessing corrections
@@ -311,9 +345,10 @@ class Stacker( object ):
             self.write_frame_to_fits( fname,
                                       np.squeeze( pp_frms[:,:,iframe]),
                                       dtype = dtype,
-                                      overwrite = overwrite )
+                                      overwrite = overwrite,
+                                      extrameta = self._frm_meta[ iframe ] )
 
-    def write_frame_to_fits( self, filename, frame, dtype = None, overwrite = False ):
+    def write_frame_to_fits( self, filename, frame, dtype = None, overwrite = False, extrameta = None ):
         """
         write out a 2D frame of data to a fits file, casting to a particular
         numpy dtype beforehand if necessary
@@ -375,6 +410,9 @@ class Stacker( object ):
         hdr = hdu.header
 
         hdr.extend( self.metadata )
+
+        if extrameta:
+            hdr.extend( extrameta )
                 
         hdul = fits.HDUList( [hdu] )
         hdul.writeto( filename, overwrite = overwrite )
@@ -440,7 +478,7 @@ class Stacker( object ):
         with open( jsonname, 'w' ) as f:
             f.write( jsonstr )
         
-    @log_debug    
+    # @log_debug    
     def preprocess( self ):
         """
         Define this preprocess method to apply to the raw
@@ -452,7 +490,7 @@ class Stacker( object ):
         
         return self.get_raw_frames()
 
-    @log_debug
+    # @log_debug
     def postprocess( self ):
         """
         define a post-process method to apply after stacking to the 
@@ -461,7 +499,7 @@ class Stacker( object ):
                 
         return self._stack
 
-    @log_debug
+    # @log_debug
     def debayer( self, bayer_frame ):
         """
         remove the bayer mosaic from the raw FPA data. This method sums
@@ -519,7 +557,7 @@ class DarkStacker( Stacker ):
         self._bias_stack = bias_stack
         super().__init__( dark_frames, method = method )
 
-    @log_debug
+    # @log_debug
     def preprocess( self ):
         """
         remove the bias frame from each dark frame if the bias
@@ -534,7 +572,7 @@ class DarkStacker( Stacker ):
 
         return pp_frames
 
-    @log_debug
+    # @log_debug
     def get_meta_json( self ):
         """
         the Dark stacker meta data should include some information about the 
@@ -585,7 +623,7 @@ class FlatStacker( Stacker ):
 
         super().__init__( flat_frames, method = method )
 
-    @log_debug
+    # @log_debug
     def preprocess( self ):
         """
         Remove the bias and dark frame stack from each frame
@@ -612,7 +650,7 @@ class FlatStacker( Stacker ):
 
         return self._flat
 
-    @log_debug
+    # @log_debug
     def make_flat_frame( self ):
         """
         generate the flat frame to use. Does not return the flat frame.
@@ -633,14 +671,14 @@ class FlatStacker( Stacker ):
         self._flat = dimg / self._flat_mean
 
         
-    @log_debug
+    # @log_debug
     def get_flat( self ):
         """
         return the flat frame as a numpy array
         """
         return self.flat
 
-    @log_debug
+    # @log_debug
     def get_meta_json( self ):
         """
         the Dark stacker meta data should include some information about the 
@@ -688,7 +726,7 @@ class LightStacker( Stacker ):
 
         super().__init__( light_frames, method = method )
 
-    @log_debug
+    # @log_debug
     def pre_proc( self ):
         """
         remove bias frame stack from each frame
@@ -735,7 +773,8 @@ class LightStacker( Stacker ):
 
         pp_out = np.zeros( [ int(L/2), int(M/2), N ] ) 
 
-        for ifrm in prange( N ):
+        for ifrm in trange( N, desc = 'Pre-processing: ', leave = True ):
+            
             # remove bias
             ppf = np.squeeze(pp_frames[:,:,ifrm]) - self._dark_stack.stack
 
